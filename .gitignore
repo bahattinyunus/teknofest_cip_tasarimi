@@ -1,0 +1,29 @@
+# EDA Tools
+*.log
+*.rpt
+*.svf
+*.vcd
+*.fsdb
+*.shm/
+*.key
+*.vpd
+*~
+*.bak
+*.o
+*.iso
+*.out
+*.exe
+
+# OpenLane
+openlane/
+runs/
+/out/
+/tmp/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
