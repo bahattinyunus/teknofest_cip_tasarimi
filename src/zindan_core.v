@@ -10,6 +10,7 @@
 module zindan_core (
     input clk,
     input reset,
+    input uart_rx_in,
     output [31:0] debug_leds,
     output uart_tx_out
 );
@@ -54,18 +55,35 @@ module zindan_core (
     wire stall_if, stall_id, flush_ex;
     reg [31:0] alu_fwd_a, alu_fwd_b;
 
+    // Peripheral & Interrupt Wires
+    wire [31:0] timer_read_data;
+    wire [31:0] uart_rx_data;
+    wire timer_int, uart_rx_ready;
+    wire interrupt_taken;
+    reg  [31:0] mepc; // Save return PC
+    
+    localparam TRAP_VECTOR = 32'h000000FC;
+
+    assign interrupt_taken = timer_int; // Basic interrupt: just timer for now
+
     // --- STAGE 1: FETCH (IF) ---
     assign pc_plus_4 = pc + 4;
     
     // PC Hiyerarsisi
-    assign next_pc = (id_ex_jalr) ? (alu_fwd_a + id_ex_imm) :
+    assign next_pc = (interrupt_taken) ? TRAP_VECTOR :
+                     (id_ex_jalr) ? (alu_fwd_a + id_ex_imm) :
                      (id_ex_jump) ? (id_ex_pc + (jal_imm << 1)) :
                      (id_ex_branch && zero_flag) ? (id_ex_pc + (id_ex_imm << 1)) : 
                      (stall_if) ? pc : (pc + 4);
 
     always @(posedge clk or posedge reset) begin
         if (reset) pc <= 32'b0;
-        else if (!stall_if) pc <= next_pc;
+        else if (!stall_if || interrupt_taken) pc <= next_pc;
+    end
+
+    // Save PC on interrupt
+    always @(posedge clk) begin
+        if (interrupt_taken) mepc <= pc;
     end
 
     imem inst_mem (.addr(pc), .instruction(instruction));
@@ -76,7 +94,7 @@ module zindan_core (
             if_id_instr <= 0;
         end else if (!stall_id) begin
             if_id_pc <= pc;
-            if_id_instr <= (id_ex_jump || id_ex_jalr || (id_ex_branch && zero_flag)) ? 32'h00000013 : instruction; // Flush logic
+            if_id_instr <= (id_ex_jump || id_ex_jalr || (id_ex_branch && zero_flag) || interrupt_taken) ? 32'h00000013 : instruction; // Flush logic
         end
     end
 
@@ -196,18 +214,39 @@ module zindan_core (
         .addr(ex_mem_alu_result), .write_data(ex_mem_write_data), .read_data(mem_read_data)
     );
 
-    // UART
+    // UART Transmitter (The Courier)
     uart_tx the_courier (
         .clk(clk), .rst(reset), .data(ex_mem_write_data[7:0]),
         .tx_start(ex_mem_mem_write && ex_mem_alu_result == 32'h80000000),
         .tx_out(uart_tx_out), .tx_ready()
     );
 
+    // UART Receiver (The Ear)
+    uart_rx the_ear (
+        .clk(clk), .rst(reset), .rx_in(uart_rx_in),
+        .data(uart_rx_data[7:0]), .rx_ready(uart_rx_ready),
+        .rx_clear(ex_mem_mem_read && ex_mem_alu_result == 32'h80000020)
+    );
+
+    // Timer (The Chronos)
+    timer the_chronos (
+        .clk(clk), .rst(reset), .addr(ex_mem_alu_result),
+        .write_data(ex_mem_write_data),
+        .mem_write(ex_mem_mem_write && (ex_mem_alu_result >= 32'h80000010 && ex_mem_alu_result <= 32'h80000018)),
+        .mem_read(ex_mem_mem_read && (ex_mem_alu_result >= 32'h80000010 && ex_mem_alu_result <= 32'h80000018)),
+        .read_data(timer_read_data),
+        .interrupt(timer_int)
+    );
+
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             mem_wb_reg_write <= 0;
         end else begin
-            mem_wb_mem_read_data <= (ex_mem_alu_result == 32'h80000004) ? 32'b1 : mem_read_data; // Mock UART ready
+            mem_wb_mem_read_data <= (ex_mem_alu_result == 32'h80000004) ? 32'b1 : // Mock UART TX ready
+                                    (ex_mem_alu_result >= 32'h80000010 && ex_mem_alu_result <= 32'h80000018) ? timer_read_data :
+                                    (ex_mem_alu_result == 32'h80000020) ? {24'b0, uart_rx_data[7:0]} :
+                                    (ex_mem_alu_result == 32'h80000024) ? {31'b0, uart_rx_ready} :
+                                    mem_read_data;
             mem_wb_alu_result <= ex_mem_alu_result;
             mem_wb_rd <= ex_mem_rd;
             mem_wb_reg_write <= ex_mem_reg_write;
