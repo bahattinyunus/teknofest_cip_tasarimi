@@ -23,6 +23,7 @@ module alu (
             4'b0010: result = a & b;       // AND (Mantikli ol)
             4'b0011: result = a | b;       // OR (Ya o ya bu)
             4'b0100: result = a ^ b;       // XOR (Karmasik iliskiler)
+            4'b0101: result = a * b;       // Çarpma (Yatırım tavsiyesi değildir)
             4'b1111: result = 32'hDEADBEEF; // KAOS MODU
             default: result = 32'b0;       // Hicbir sey yapmama hakki
         endcase

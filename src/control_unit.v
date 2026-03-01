@@ -23,26 +23,36 @@ module control_unit (
         // Varsayilan: Hicbir sey yapma, enerji tasarrufu.
         {branch, mem_read, mem_to_reg, alu_op, mem_write, alu_src, reg_write} = 0;
 
-        case (opcode)
-            7'b0110011: begin // R-Type (Gercek Muhendislik)
+            7'b0110011: begin // R-Type (Muhendislik Harikasi)
                 reg_write = 1;
-                alu_op = 2'b10;
+                alu_op = 2'b10; // R-Type ALU op
             end
-            7'b0000011: begin // Load (Veri tasiyici)
+            7'b0010011: begin // I-Type (Immediate)
+                reg_write = 1;
+                alu_src = 1;
+                alu_op = 2'b11; // I-Type ALU op
+            end
+            7'b0000011: begin // Load (Veri Tasiyici)
                 alu_src = 1;
                 mem_to_reg = 1;
                 reg_write = 1;
                 mem_read = 1;
+                alu_op = 2'b00; // Addition for address
             end
-            7'b0100011: begin // Store (Veri gomucu)
+            7'b0100011: begin // Store (Veri Gomucu)
                 alu_src = 1;
                 mem_write = 1;
+                alu_op = 2'b00; // Addition for address
+            end
+            7'b1100011: begin // Branch (Karar Verici)
+                branch = 1;
+                alu_op = 2'b01; // Subtraction for comparison
             end
             7'b1111111: begin // HALT (Yeter duralim artik)
                 // Sistemi kilitle
             end
             default: begin
-                // Tanimsiz opcode -> Panik yapma, ignorance is bliss.
+                // Tanimsiz opcode -> Ignorance is bliss.
             end
         endcase
     end
