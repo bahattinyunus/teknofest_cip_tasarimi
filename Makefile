@@ -1,43 +1,57 @@
-# ZİNDAN-1 MAKEFILE
-# "Derlemiyor, sadece insa ediyor."
+# ZİNDAN-1 SoC Makefile
+# Hedefler: Sim, Harden, Temizlik
+#
+# Dependecy: iverilog, vvp, yosys, OpenLane
 
-# Derleyici (Varsayilan: iverilog)
-CC = iverilog
-# Simulasyon Yurutucu
-SIM = vvp
+DESIGN    := zindan_core
+SRC       := $(wildcard src/*.v)
+TOP       := $(DESIGN)
+TB        := testbench/zindan_tb.v
+SIM_OUT   := sim/$(DESIGN).vvp
+VCD_OUT   := sim/$(DESIGN).vcd
 
-# Dosyalar
-SRC = src/alu.v src/control_unit.v src/zindan_core.v
-TB = testbench/zindan_tb.v
-OUT = simulation.out
+.PHONY: all sim clean harden lint
 
-# Hedefler
-all: help
+all: sim
 
-help:
-	@echo "----------------------------------------------------------------"
-	@echo "ZİNDAN-1 YONETIM PANELI"
-	@echo "----------------------------------------------------------------"
-	@echo "Mevcut Komutlar:"
-	@echo "  make run_simulation  -> Simulasyonu baslatir (cesaretin varsa)"
-	@echo "  make harden          -> GDSII dosyalarini uretir (saka)"
-	@echo "  make clean           -> Ortaligi toplar"
-	@echo "----------------------------------------------------------------"
+# Create sim directory
+sim:
+	@mkdir -p sim
+	iverilog -g2012 -Wall -o $(SIM_OUT) $(TB) $(SRC)
+	vvp $(SIM_OUT)
+	@echo "[ZİNDAN] Simülasyon tamamlandı."
 
-run_simulation:
-	@echo "[INFO] Simulation Started..."
-	@echo "[INFO] Loading ZND-8086 Core..."
-	@$(CC) -o $(OUT) $(SRC) $(TB)
-	@$(SIM) $(OUT)
-	@echo "[INFO] Eger yukarida bir hata gormediysen, mucize gerceklesti."
+# View waveforms (requires gtkwave)
+wave: sim
+	gtkwave $(VCD_OUT) &
 
+# Lint check with iverilog
+lint:
+	iverilog -g2012 -Wall -t null $(SRC)
+	@echo "[ZİNDAN] Lint check passed."
+
+# OpenLane Hardening (ASIC Flow)
+# Requires OpenLane to be installed and sourced
 harden:
-	@echo "[INFO] GDSII Hardening Process Initiated..."
-	@echo "[....] Fan hizi arttiriliyor..."
-	@echo "[....] CPU sicakligi yukseliyor..."
-	@echo "[ERROR] Lisans bulunamadi. Lutfen 1 milyon dolar odeyin."
-	@echo "[INFO] Saka saka. Henuz OpenLane config dosyalari hazir degil."
+	@echo "[ZİNDAN] ASIC Hardening başlatılıyor..."
+	flow.tcl -design $(shell pwd) -tag zindan_run_$(shell date +%Y%m%d_%H%M%S)
+	@echo "[ZİNDAN] Hardening tamamlandı. GDS çıktısı için 'runs/' klasörünü kontrol edin."
 
 clean:
-	rm -f $(OUT) *.vcd
-	@echo "[INFO] Copler disari atildi."
+	rm -rf sim/
+	@echo "[ZİNDAN] Temizlik tamamlandı."
+
+# Assemble test program
+asm:
+	python3 tools/assembler.py tools/hello_world.asm sim/hello_world.hex
+	@echo "[ZİNDAN] Derleme tamamlandı: sim/hello_world.hex"
+
+help:
+	@echo "ZİNDAN-1 SoC Makefile Yardımı"
+	@echo "================================"
+	@echo "  make sim    - Simülasyonu çalıştır (iverilog)"
+	@echo "  make wave   - Dalgaformu görüntüle (gtkwave)"
+	@echo "  make lint   - Sözdizim kontrolü yap"
+	@echo "  make harden - ASIC layout üret (OpenLane)"
+	@echo "  make asm    - Assembly programı derle"
+	@echo "  make clean  - Geçici dosyaları temizle"
