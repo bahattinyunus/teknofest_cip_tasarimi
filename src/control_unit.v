@@ -15,14 +15,16 @@ module control_unit (
     output reg mem_to_reg,
     output reg [1:0] alu_op,
     output reg mem_write,
-    output reg alu_src,
+    output reg jump,
+    output reg jalr,
     output reg reg_write
 );
 
     always @(*) begin
         // Varsayilan: Hicbir sey yapma, enerji tasarrufu.
-        {branch, mem_read, mem_to_reg, alu_op, mem_write, alu_src, reg_write} = 0;
+        {jump, jalr, branch, mem_read, mem_to_reg, alu_op, mem_write, alu_src, reg_write} = 0;
 
+        case (opcode)
             7'b0110011: begin // R-Type (Muhendislik Harikasi)
                 reg_write = 1;
                 alu_op = 2'b10; // R-Type ALU op
@@ -31,6 +33,15 @@ module control_unit (
                 reg_write = 1;
                 alu_src = 1;
                 alu_op = 2'b11; // I-Type ALU op
+            end
+            7'b1101111: begin // JAL (Yuvaya Donus)
+                jump = 1;
+                reg_write = 1;
+            end
+            7'b1100111: begin // JALR (Dinamik Atlayis)
+                jump = 1;
+                jalr = 1;
+                reg_write = 1;
             end
             7'b0000011: begin // Load (Veri Tasiyici)
                 alu_src = 1;
